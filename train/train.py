@@ -14,6 +14,7 @@ import argparse
 import os
 
 import torch
+import torch.utils.checkpoint as ckpt
 from torch.nn.functional import cross_entropy
 
 from rwkv_torch import RWKV
@@ -35,6 +36,8 @@ def main():
     ap.add_argument("--out", default="weights.bin")
     ap.add_argument("--steps_per_export", type=int, default=2000)
     ap.add_argument("--use_8bit", action="store_true", help="bitsandbytes 8-bit AdamW")
+    ap.add_argument("--checkpoint", action="store_true",
+                    help="gradient checkpointing (450M+ icin bellek sigortasi)")
     args = ap.parse_args()
 
     if not args.roots_code and not args.roots_text:
@@ -82,7 +85,10 @@ def main():
             inp = inp[:, :-1]
             opt.zero_grad()
             with torch.cuda.amp.autocast(enabled=(device == "cuda")):
-                logits = model(inp)                       # (B, T, vocab)
+                if args.checkpoint:
+                    logits = ckpt.checkpoint(model, inp, use_reentrant=False)
+                else:
+                    logits = model(inp)                       # (B, T, vocab)
                 loss = cross_entropy(logits.reshape(-1, vocab), tgt.reshape(-1))
             scaler.scale(loss).backward()
             scaler.step(opt)
