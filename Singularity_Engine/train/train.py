@@ -40,6 +40,8 @@ def main():
                     help="gradient checkpointing (450M+ icin bellek sigortasi)")
     ap.add_argument("--max_steps", type=int, default=0,
                     help="0=sinirsiz. >0 ise bu kadar adimdan sonra durur ve kaydeder.")
+    ap.add_argument("--log_every", type=int, default=10,
+                    help="Kac adimda bir loss/ppl yazsin (1=her adim).")
     args = ap.parse_args()
 
     if not args.roots_code and not args.roots_text:
@@ -53,7 +55,18 @@ def main():
     model = RWKV(vocab, args.C, args.n_blocks)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
+
+    n_params = sum(p.numel() for p in model.parameters())
+    n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[train] device={device}")
+    print(f"[train] TOPLAM PARAMETRE: {n_params:,} ({n_params/1e6:.1f}M)")
+    print(f"[train] egitilebilir     : {n_train:,} ({n_train/1e6:.1f}M)")
+    if device == "cuda":
+        try:
+            gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+            print(f"[train] GPU: {torch.cuda.get_device_name(0)} ({gb:.1f} GB)")
+        except Exception:
+            pass
 
     opt = None
     if args.use_8bit and device == "cuda":
@@ -99,9 +112,10 @@ def main():
             n_running += 1
             buf = []
             step += 1
-            if step % 50 == 0:
-                ppl = float(torch.exp(torch.tensor(running / n_running)))
-                print(f"[step {step}] loss={running / n_running:.4f} ppl~={ppl:.2f}")
+            if step % args.log_every == 0:
+                avg = running / n_running
+                ppl = float(torch.exp(torch.tensor(min(avg, 20.0))))
+                print(f"[step {step}] loss={avg:.4f} ppl~={ppl:.2f}", flush=True)
                 running = 0.0
                 n_running = 0
             if step % args.steps_per_export == 0:
