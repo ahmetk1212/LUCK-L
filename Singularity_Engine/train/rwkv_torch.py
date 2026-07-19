@@ -19,7 +19,7 @@ class RWKV(torch.nn.Module):
 
         self.blocks = torch.nn.ModuleList()
         for _ in range(n_blocks):
-            b = torch.nn.ModuleDict()
+            b = torch.nn.ParameterDict()
             b["tmix"] = torch.nn.Parameter(torch.full((1, C), 0.5))
             b["tmix2"] = torch.nn.Parameter(torch.full((1, C), 0.5))
             b["decay"] = torch.nn.Parameter(
