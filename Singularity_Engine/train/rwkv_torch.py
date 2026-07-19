@@ -62,8 +62,8 @@ class RWKV(torch.nn.Module):
                 r = xx @ b["Wr"]
                 k = xx @ b["Wk"]
                 v = xx @ b["Wv"]
-                ek = torch.exp(k + b["bonus"])
-                dec = torch.exp(-b["decay"])
+                ek = torch.exp(torch.clamp(k + b["bonus"], max=30.0))
+                dec = torch.exp(-torch.clamp(b["decay"], min=0.0, max=30.0))
                 num = dec * st["num"] + ek * v
                 den = dec * st["den"] + ek
                 wkv = num / den
@@ -86,7 +86,7 @@ class RWKV(torch.nn.Module):
                 st["xp"] = rx
                 st["xpf"] = rx2
             out[:, t, :] = xt
-        return out @ self.Whead.T  # (B, T, vocab)
+        return out @ self.Whead  # (B, T, vocab); Whead: (C, vocab)
 
     # -------- weights.bin (C++ ile birebir ayni sozlesme) --------
     def export_weights(self, path):
